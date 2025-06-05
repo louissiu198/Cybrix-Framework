@@ -1,0 +1,803 @@
+from httpx import Client, post, get
+from json import dumps
+from random import choice
+from concurrent.futures import ThreadPoolExecutor, wait
+from typing import Optional, Dict, Any
+
+class Request: # imcomplete, but usable
+    def __init__(
+            self, 
+            http2: bool = True, 
+            proxy: str = None,
+            verify: bool = False,
+            timeout: int = None,
+            headers: dict = {
+                "content-type": "application/json"
+            },
+            base_domain: str = None
+        ):
+        
+        if proxy != None:
+            proxy = "http://" + proxy
+    
+        self.client = Client(
+            proxy = proxy,
+            http2 = http2, 
+            verify = verify,
+            timeout = timeout
+        )
+        
+        self.client.headers = headers
+        if base_domain != None:
+            self.client.base_url = base_domain
+
+    def get(self, url: str, headers: dict = None) -> get:
+        return self.client.get(url, headers = headers)
+
+    def post(self, url: str, data: dict = None, json: dict = None, headers: dict = None):
+        return self.client.post(url, data = data, json = json, headers = headers)
+
+class Cybrix:
+    def __init__(
+            self,
+            proxy: str = None,
+            domain: str = "https://cybrix-bytedance1.p.rapidapi.com"
+        ):
+        request = Request(proxy = None, base_domain = domain)
+        self.config = {
+            "d_timeout": 15,
+            "total_retry": 10,
+        }
+        self.proxy = proxy
+        self.request = request.client
+    
+    # Device Endpoints
+    def register_device_v2(
+            self, 
+            aid: Optional[str] = "1233", 
+            region: Optional[str] = "",
+            store_idc: Optional[str] = "maliva", 
+            os_version: Optional[str] = "9", 
+            version_name: Optional[str] = "38.1.1"
+        ) -> dict:
+        for d in range(self.config["total_retry"]):
+            r = self.request.post(
+                "/device/v2/deviceRegister",
+                json = {
+                    "proxy": self.proxy, 
+                    "app_id": aid, 
+                    "region": region,
+                    "store_idc": store_idc, 
+                    "os_version": os_version, 
+                    "version_name": version_name
+                },
+                timeout = self.config["d_timeout"]
+            )
+            if r.status_code == 200 and "activated" in r.text:
+                return r.json()["data"]            
+    
+    def register_device_v1(
+            self, 
+            aid: Optional[str] = "1233", 
+            region: Optional[str] = "",
+            store_idc: Optional[str] = "maliva", 
+            scene_type: Optional[str] = "views",
+            os_version: Optional[str] = "9", 
+            version_name: Optional[str] = "38.1.1"
+        ) -> dict:
+        for d in range(self.config["total_retry"]):
+            r = self.request.post(
+                "/device/v1/deviceRegister",
+                json = {
+                    "app_id": aid, 
+                    "region": region,
+                    "store_idc": store_idc, 
+                    "os_version": os_version, 
+                    "scene_type": scene_type,
+                    "version_name": version_name
+                },
+                timeout = self.config["d_timeout"]
+            )
+            if r.status_code == 200 and "success" in r.text:
+                return r.json()["data"]
+    
+    def device_template(
+            self,
+            app_id: str = "1233",
+            version_code: str = "38.1.1",
+            os_version: str = "9"
+        ) -> dict:
+        r = self.request.post(
+            "/device/v2/deviceTemplate",
+            json = {
+                "app_id": app_id,
+                "version_code": version_code,
+                "os_version": os_version
+            }
+        )
+        return r.json() if r.status_code == 200 else None
+
+    # Account Endpoints
+    def account_info(self, account_data: Dict[str, Any]) -> dict:
+        r = self.request.post(
+            "/account/info",
+            json = {"account_data": account_data}
+        )
+        return r.json() if r.status_code == 200 else None
+    
+    def account_view(
+            self,
+            video_id: str,
+            device_data: Optional[Dict[str, Any]] = None,
+            account_data: Optional[Dict[str, Any]] = None,
+            proxy: Optional[str] = None
+        ) -> dict:
+        r = self.request.post(
+            "/account/view",
+            json = {
+                "device_data": device_data or {}, # either device_data or account_data is passed
+                "account_data": account_data or {},
+                "video_id": video_id,
+                "proxy": proxy or self.proxy
+            }
+        )
+        return r.json() if r.status_code == 200 else None
+    
+    def account_like(
+            self,
+            account_data: Dict[str, Any],
+            video_id: str,
+            proxy: Optional[str] = None
+        ) -> dict:
+        r = self.request.post(
+            "/account/like",
+            json = {
+                "account_data": account_data,
+                "video_id": video_id,
+                "proxy": proxy or self.proxy
+            }
+        )
+        return r.json() if r.status_code == 200 else None
+    
+    def account_share(
+            self,
+            account_data: Dict[str, Any],
+            video_id: str,
+            proxy: Optional[str] = None
+        ) -> dict:
+        r = self.request.post(
+            "/account/share",
+            json = {
+                "account_data": account_data,
+                "video_id": video_id,
+                "proxy": proxy or self.proxy
+            }
+        )
+        return r.json() if r.status_code == 200 else None
+    
+    def account_follow(
+            self,
+            account_data: Dict[str, Any],
+            user_id: str,
+            sec_user_id: str,
+            proxy: Optional[str] = None
+        ) -> dict:
+        r = self.request.post(
+            "/account/follow",
+            json = {
+                "account_data": account_data,
+                "user_id": user_id,
+                "sec_user_id": sec_user_id,
+                "proxy": proxy or self.proxy
+            }
+        )
+        return r.json() if r.status_code == 200 else None
+    
+    def account_comment(
+            self,
+            account_data: Dict[str, Any],
+            video_id: str,
+            content: str,
+            proxy: Optional[str] = None
+        ) -> dict:
+        r = self.request.post(
+            "/account/comment",
+            json = {
+                "account_data": account_data,
+                "video_id": video_id,
+                "content": content,
+                "proxy": proxy or self.proxy
+            }
+        )
+        return r.json() if r.status_code == 200 else None
+    
+    def account_comment_like(
+            self,
+            account_data: Dict[str, Any],
+            comment_id: str,
+            proxy: Optional[str] = None
+        ) -> dict:
+        r = self.request.post(
+            "/account/comment/like",
+            json = {
+                "account_data": account_data,
+                "comment_id": comment_id,
+                "proxy": proxy or self.proxy
+            }
+        )
+        return r.json() if r.status_code == 200 else None
+    
+    def account_favourites(
+            self,
+            account_data: Dict[str, Any],
+            video_id: str,
+            proxy: Optional[str] = None
+        ) -> dict:
+        r = self.request.post(
+            "/account/favourites",
+            json = {
+                "account_data": account_data,
+                "video_id": video_id,
+                "proxy": proxy or self.proxy
+            }
+        )
+        return r.json() if r.status_code == 200 else None
+    
+    def account_token_beat(
+            self,
+            account_data: Dict[str, Any],
+            proxy: Optional[str] = None
+        ) -> dict:
+        r = self.request.post(
+            "/account/token/beat",
+            json = {
+                "account_data": account_data,
+                "proxy": proxy or self.proxy
+            }
+        )
+        return r.json() if r.status_code == 200 else None
+
+    # Live Endpoints
+    # def live_view( # doesn't work
+    #         self,
+    #         account_data: Dict[str, Any],
+    #         room_id: str,
+    #         proxy: Optional[str] = None
+    #     ) -> dict:
+    #     r = self.request.post(
+    #         "/live/view",
+    #         json = {
+    #             "account_data": account_data,
+    #             "room_id": room_id,
+    #             "proxy": proxy or self.proxy
+    #         }
+    #     )
+    #     return r.json() if r.status_code == 200 else None
+    
+    # def live_like(
+    #         self,
+    #         account_data: Dict[str, Any],
+    #         room_id: str,
+    #         proxy: Optional[str] = None
+    #     ) -> dict:
+    #     r = self.request.post(
+    #         "/live/like",
+    #         json = {
+    #             "account_data": account_data,
+    #             "room_id": room_id,
+    #             "proxy": proxy or self.proxy
+    #         }
+    #     )
+    #     return r.json() if r.status_code == 200 else None
+    
+    def live_follow( # incorrect handling on the server side
+            self,
+            account_data: Dict[str, Any],
+            room_id: str,
+            user_id: str,
+            sec_user_id: str,
+            proxy: Optional[str] = None
+        ) -> dict:
+        r = self.request.post(
+            "/live/follow",
+            json = {
+                "account_data": account_data,
+                "room_id": room_id,
+                "user_id": user_id,
+                "sec_user_id": sec_user_id,
+                "proxy": proxy or self.proxy
+            }
+        )
+        return r.json() if r.status_code == 200 else None
+    
+    def live_comment(
+            self,
+            account_data: Dict[str, Any],
+            room_id: str,
+            content: str,
+            proxy: Optional[str] = None
+        ) -> dict:
+        r = self.request.post(
+            "/live/comment",
+            json = {
+                "account_data": account_data,
+                "room_id": room_id,
+                "content": content,
+                "proxy": proxy or self.proxy
+            }
+        )
+        return r.json() if r.status_code == 200 else None
+
+    # Service/Algorithm Endpoints
+    def sign_request(
+            self,
+            params: str,
+            mssdk_version_str: str,
+            x_ss_stub: Optional[str] = None,
+            seed_data: Optional[str] = None,
+            device_token: Optional[str] = None,
+            seed_version: Optional[int] = None,
+            app_launch_time: Optional[int] = None,
+            x_bd_lanusk: Optional[str] = None
+        ) -> dict:
+        r = self.request.post(
+            "/service/sign",
+            json = {
+                "params": params,
+                "x_ss_stub": x_ss_stub,
+                "seed_data": seed_data,
+                "device_token": device_token,
+                "seed_version": seed_version,
+                "app_launch_time": app_launch_time,
+                "mssdk_version_str": mssdk_version_str,
+                "x_bd_lanusk": x_bd_lanusk
+            }
+        )
+        return r.json() if r.status_code == 200 else None
+    
+    def sign_cylons(self, x_bd_client_key: str) -> dict:
+        r = self.request.post(
+            "/service/cylons",
+            json = {"x_bd_client_key": x_bd_client_key}
+        )
+        return r.json() if r.status_code == 200 else None
+    
+    def tt_encrypt(self, data: Dict[str, Any]) -> dict:
+        r = self.request.post(
+            "/service/ttEncrypt",
+            json = {"data": data}
+        )
+        return r.json() if r.status_code == 200 else None
+    
+    def tt_decrypt(self, data: str) -> dict:
+        r = self.request.post(
+            "/service/ttDecrypt",
+            json = {"data": data}
+        )
+        return r.json() if r.status_code == 200 else None
+    
+    def mssdk_encrypt( # requires a new update
+            self,
+            app_id: int,
+            protobuf: str,
+            mssdk_version_str: Optional[str] = None
+        ) -> dict:
+        r = self.request.post(
+            "/service/msEncrypt",
+            json = {
+                "app_id": app_id,
+                "protobuf": protobuf,
+                "mssdk_version_str": mssdk_version_str
+            }
+        )
+        return r.json() if r.status_code == 200 else None
+    
+    def mssdk_decrypt( # requires a new update
+            self,
+            app_id: int,
+            protobuf: str,
+            mssdk_version_str: Optional[str] = None
+        ) -> dict:
+        r = self.request.post(
+            "/service/msDecrypt",
+            json = {
+                "app_id": app_id,
+                "protobuf": protobuf,
+                "mssdk_version_str": mssdk_version_str
+            }
+        )
+        return r.json() if r.status_code == 200 else None
+    
+    def decrypt_argus(self, data: str, app_id: Optional[str] = None) -> dict: # requires a new update
+        r = self.request.post(
+            "/service/decryptArgus",
+            json = {
+                "data": data,
+                "app_id": app_id
+            }
+        )
+        return r.json() if r.status_code == 200 else None
+
+    # Registration Endpoints
+    def register_email_send( # flagged currently
+            self,
+            device_data: Dict[str, Any],
+            email: str,
+            proxy: Optional[str] = None
+        ) -> dict:
+        r = self.request.post(
+            "/register/email/send",
+            json = {
+                "device_data": device_data,
+                "email": email,
+                "proxy": proxy or self.proxy
+            }
+        )
+        return r.json() if r.status_code == 200 else None
+    
+    def register_email_verify(
+            self,
+            device_data: Dict[str, Any],
+            email: str,
+            code: str,
+            proxy: Optional[str] = None
+        ) -> dict:
+        r = self.request.post(
+            "/register/email/verify",
+            json = {
+                "device_data": device_data,
+                "email": email,
+                "code": code,
+                "proxy": proxy or self.proxy
+            }
+        )
+        return r.json() if r.status_code == 200 else None
+
+    # Login Endpoints
+    def login_email_send(
+            self,
+            device_data: Dict[str, Any],
+            email: str,
+            proxy: Optional[str] = None
+        ) -> dict:
+        r = self.request.post(
+            "/login/email/send",
+            json = {
+                "device_data": device_data,
+                "email": email,
+                "proxy": proxy or self.proxy
+            }
+        )
+        return r.json() if r.status_code == 200 else None
+    
+    def login_email_verify(
+            self,
+            device_data: Dict[str, Any],
+            email: str,
+            code: str,
+            proxy: Optional[str] = None
+        ) -> dict:
+        r = self.request.post(
+            "/login/email/verify",
+            json = {
+                "device_data": device_data,
+                "email": email,
+                "code": code,
+                "proxy": proxy or self.proxy
+            }
+        )
+        return r.json() if r.status_code == 200 else None
+    
+    def login_mobile_send(
+            self,
+            device_data: Dict[str, Any],
+            mobile: str,
+            proxy: Optional[str] = None
+        ) -> dict:
+        r = self.request.post(
+            "/login/mobile/send",
+            json = {
+                "device_data": device_data,
+                "mobile": mobile,
+                "proxy": proxy or self.proxy
+            }
+        )
+        return r.json() if r.status_code == 200 else None
+    
+    def login_mobile_verify(
+            self,
+            device_data: Dict[str, Any],
+            mobile: str,
+            code: str,
+            proxy: Optional[str] = None
+        ) -> dict:
+        r = self.request.post(
+            "/login/mobile/verify",
+            json = {
+                "device_data": device_data,
+                "mobile": mobile,
+                "code": code,
+                "proxy": proxy or self.proxy
+            }
+        )
+        return r.json() if r.status_code == 200 else None
+
+    # Captcha Endpoints
+    def captcha_3d(
+            self,
+            device_data: Dict[str, Any],
+            store_idc: str,
+            verify_fp: Optional[str] = None,
+            proxy: Optional[str] = None
+        ) -> dict:
+        r = self.request.post(
+            "/captcha/3d",
+            json = {
+                "device_data": device_data,
+                "store_idc": store_idc,
+                "verify_fp": verify_fp,
+                "proxy": proxy or self.proxy
+            }
+        )
+        return r.json() if r.status_code == 200 else None
+    
+    def captcha_slide(
+            self,
+            device_data: Dict[str, Any],
+            store_idc: str,
+            verify_fp: Optional[str] = None,
+            proxy: Optional[str] = None
+        ) -> dict:
+        r = self.request.post(
+            "/captcha/slide",
+            json = {
+                "device_data": device_data,
+                "store_idc": store_idc,
+                "verify_fp": verify_fp,
+                "proxy": proxy or self.proxy
+            }
+        )
+        return r.json() if r.status_code == 200 else None
+    
+    def captcha_whirl(
+            self,
+            device_data: Dict[str, Any],
+            store_idc: str,
+            verify_fp: Optional[str] = None,
+            proxy: Optional[str] = None
+        ) -> dict:
+        r = self.request.post(
+            "/captcha/whirl",
+            json = {
+                "device_data": device_data,
+                "store_idc": store_idc,
+                "verify_fp": verify_fp,
+                "proxy": proxy or self.proxy
+            }
+        )
+        return r.json() if r.status_code == 200 else None
+
+    # Scraping Endpoints
+    def scraping_user_info(self, username: str) -> dict:
+        r = self.request.post(
+            "/scraping/user/info",
+            json = {"username": username}
+        )
+        return r.json() if r.status_code == 200 else None
+    
+    def scraping_user_uniqueid(self, username: str) -> dict:
+        r = self.request.post(
+            "/scraping/user/uniqueid",
+            json = {"username": username}
+        )
+        return r.json() if r.status_code == 200 else None
+    
+    def scraping_user_followings(
+            self,
+            username: str,
+            count: Optional[int] = None,
+            max_time: Optional[int] = None
+        ) -> dict:
+        r = self.request.post(
+            "/scraping/user/followings",
+            json = {
+                "username": username,
+                "count": count,
+                "time": max_time
+            }
+        )
+        return r.json() if r.status_code == 200 else None
+    
+    def scraping_user_followers(
+            self,
+            username: str,
+            count: Optional[int] = None,
+            max_time: Optional[int] = None
+        ) -> dict:
+        r = self.request.post(
+            "/scraping/user/followers",
+            json = {
+                "username": username,
+                "count": count,
+                "time": max_time
+            }
+        )
+        return r.json() if r.status_code == 200 else None
+    
+    def scraping_user_mixlist(
+            self,
+            username: str,
+            cursor: Optional[int] = None
+        ) -> dict:
+        r = self.request.post(
+            "/scraping/user/mixlist",
+            json = {
+                "username": username,
+                "cursor": cursor
+            }
+        )
+        return r.json() if r.status_code == 200 else None
+    
+    def scraping_user_liked_posts(
+            self,
+            username: str,
+            count: Optional[int] = None,
+            cursor: Optional[int] = None
+        ) -> dict:
+        r = self.request.post(
+            "/scraping/user/favourite/posts",
+            json = {
+                "username": username,
+                "count": count,
+                "cursor": cursor
+            }
+        )
+        return r.json() if r.status_code == 200 else None
+
+    # Advanced Endpoints
+    def advanced_registered_email(self, email: str) -> dict:
+        r = self.request.post(
+            "/advanced/registered/email",
+            json = {"email": email}
+        )
+        return r.json() if r.status_code == 200 else None
+    
+    def advanced_registered_mobile(self, mobile: str) -> dict:
+        r = self.request.post(
+            "/advanced/registered/mobile",
+            json = {"mobile": mobile}
+        )
+        return r.json() if r.status_code == 200 else None
+    
+    def advanced_registered_username(self, username: str) -> dict:
+        r = self.request.post(
+            "/advanced/registered/username",
+            json = {"username": username}
+        )
+        return r.json() if r.status_code == 200 else None
+    
+    # def advanced_login_email(
+    #         self,
+    #         device_data: Dict[str, Any],
+    #         email: str,
+    #         password: str,
+    #         proxy: Optional[str] = None
+    #     ) -> dict:
+    #     r = self.request.post(
+    #         "/advanced/login/email",
+    #         json = {
+    #             "device_data": device_data,
+    #             "email": email,
+    #             "password": password,
+    #             "proxy": proxy or self.proxy
+    #         }
+    #     )
+    #     return r.json() if r.status_code == 200 else None
+    
+    # def advanced_login_mobile(
+    #         self,
+    #         device_data: Dict[str, Any],
+    #         mobile: str,
+    #         password: str,
+    #         proxy: Optional[str] = None
+    #     ) -> dict:
+    #     r = self.request.post(
+    #         "/advanced/login/mobile",
+    #         json = {
+    #             "device_data": device_data,
+    #             "mobile": mobile,
+    #             "password": password,
+    #             "proxy": proxy or self.proxy
+    #         }
+    #     )
+    #     return r.json() if r.status_code == 200 else None
+    
+    # def advanced_login_username(
+    #         self,
+    #         device_data: Dict[str, Any],
+    #         username: str,
+    #         password: str,
+    #         proxy: Optional[str] = None
+    #     ) -> dict:
+    #     r = self.request.post(
+    #         "/advanced/login/username",
+    #         json = {
+    #             "device_data": device_data,
+    #             "username": username,
+    #             "password": password,
+    #             "proxy": proxy or self.proxy
+    #         }
+    #     )
+    #     return r.json() if r.status_code == 200 else None
+    
+    def advanced_location_email(self, email: str) -> dict:
+        r = self.request.post(
+            "/advanced/location/email",
+            json = {"email": email}
+        )
+        return r.json() if r.status_code == 200 else None
+    
+    def advanced_location_mobile(self, mobile: str) -> dict:
+        r = self.request.post(
+            "/advanced/location/mobile",
+            json = {"mobile": mobile}
+        )
+        return r.json() if r.status_code == 200 else None
+    
+    def advanced_location_username(self, username: str) -> dict:
+        r = self.request.post(
+            "/advanced/location/username",
+            json = {"username": username}
+        )
+        return r.json() if r.status_code == 200 else None
+
+    # # Private Endpoints
+    # def create_task(
+    #         self,
+    #         amount_number: int,
+    #         task_type: str,
+    #         video_link: Optional[str] = None,
+    #         content: Optional[str] = None,
+    #         sec_user_id: Optional[str] = None,
+    #         user_id: Optional[str] = None
+    #     ) -> dict:
+    #     r = self.request.post(
+    #         "/private/createTask",
+    #         json = {
+    #             "amount_number": amount_number,
+    #             "task_type": task_type,
+    #             "video_link": video_link,
+    #             "content": content,
+    #             "sec_user_id": sec_user_id,
+    #             "user_id": user_id
+    #         }
+    #     )
+    #     return r.json() if r.status_code == 200 else None
+
+
+# Example usage:
+if __name__ == "__main__":
+    client = Cybrix(
+        proxy="your_proxy_here",
+    )
+    
+    # Register a device
+    device = client.register_device_v2(
+        aid="1233",
+        store_idc="maliva",
+        os_version="9",
+        version_name="38.1.1"
+    )
+    print("Device registered:", device)
+    
+    # Get user info
+    user_info = client.scraping_user_info("tiktok")
+    print("User info:", user_info)
+    
+    # Login with email
+    # login_result = client.advanced_login_email(
+    #     device_data=device,
+    #     email="test@example.com",
+    #     password="password123"
+    # )
+    # print("Login result:", login_result)
